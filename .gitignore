@@ -1,0 +1,9 @@
+*.pdf
+bin/
+ncert-parser
+tmp/
+*.exe
+.DS_Store
+.idea/
+.vscode/
+*.log
