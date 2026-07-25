@@ -1,124 +1,107 @@
-# NCERT Book Parser
+# NCERT Book Rebuilder
 
-**World-class Go microservice** that turns any NCERT textbook / chapter PDF into rich, structured, page-by-page JSON.
+Parse any NCERT chapter PDF with **Marker** → clean structured JSON → simple Next.js reader that rebuilds the book content page-by-page.
 
-Designed specifically so every paragraph, header, image caption, and question becomes a first-class object that you can later feed into a question-generation pipeline.
+## Goal
 
-## Why this exists
+Take a chapter PDF → extract high-quality structured content (text, headings, images, tables, equations) → rebuild the same chapter in a clean web UI with simple pagination.
 
-NCERT PDFs are the gold standard for Indian school content, but extracting clean, hierarchical data (chapter → page → para / question / figure) is surprisingly hard. Most generic PDF tools either lose layout or produce flat text. This service:
+## Folder Structure
 
-- Uses **pdftotext** (poppler) + **mutool** for high-fidelity text + future image extraction
-- Detects chapters, section headers, paragraphs, and questions with NCERT-aware heuristics
-- Gives every content unit a stable **ID** so you can reference `p-ch1-12-3` or `q-ch3-45-2` later when generating questions
-- Returns a clean JSON that is ready for RAG, Q-gen, or indexing
+```
+ncert-book-parser/
+├── parser/                 # Python + Marker
+│   ├── parse_chapter.py
+│   └── requirements.txt
+├── web/                    # Next.js Book Reader
+│   ├── src/
+│   │   ├── app/
+│   │   ├── components/
+│   │   └── types/
+│   └── public/data/        # Put parsed JSON + images here
+└── README.md
+```
 
-## JSON Shape (high level)
+## 1. Parse a Chapter (Python + Marker)
+
+```bash
+cd parser
+pip install -r requirements.txt
+
+# Balanced mode (best quality, GPU recommended)
+python parse_chapter.py /path/to/ncert_chapter.pdf \
+  --out ../web/public/data/chapter1.json \
+  --title "Chemical Reactions and Equations" \
+  --mode balanced
+
+# Or fast mode (CPU friendly)
+python parse_chapter.py /path/to/ncert_chapter.pdf \
+  --out ../web/public/data/chapter1.json \
+  --mode fast
+```
+
+This will:
+- Run Marker with JSON output
+- Extract images into `web/public/data/images/`
+- Produce a clean, UI-ready JSON
+
+## 2. Run the Reader UI
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open http://localhost:3000
+
+The UI is deliberately **very simple**:
+- Chapter title on top
+- Content of current page
+- Simple Previous / Next + page number input at the bottom
+- No fancy page-turning animations
+
+## JSON Shape (what the UI expects)
 
 ```json
 {
-  "meta": {
-    "title": "...",
-    "subject": "Science",
-    "class": "10",
-    "total_pages": 42,
-    "parser_version": "0.1.0-alpha"
-  },
-  "chapters": [
+  "title": "Chemical Reactions and Equations",
+  "source_file": "chapter1.pdf",
+  "total_pages": 18,
+  "images_base_path": "data/images",
+  "pages": [
     {
-      "id": "ch-1",
-      "number": 1,
-      "title": "Chemical Reactions and Equations",
-      "pages": [
+      "page_number": 1,
+      "blocks": [
         {
-          "id": "page-5",
-          "page_number": 5,
-          "headers": [...],
-          "paragraphs": [
-            {
-              "id": "p-ch-1-5-1",
-              "text": "A chemical reaction is a process ...",
-              "order": 1
-            }
-          ],
-          "images": [],
-          "in_page_questions": []
-        }
-      ],
-      "chapter_questions": [
+          "type": "SectionHeader",
+          "text": "1. Chemical Reactions and Equations",
+          "level": 1
+        },
         {
-          "id": "q-ch-1-12-1",
-          "number": "1.",
-          "text": "Why should a magnesium ribbon be cleaned before burning in air?",
-          "type": "short",
-          "page_number": 12
+          "type": "Text",
+          "text": "A chemical reaction is a process..."
+        },
+        {
+          "type": "Picture",
+          "image": "images/xyz.png",
+          "text": "Figure 1.1"
         }
       ]
     }
-  ],
-  "content_index": {
-    "p-ch-1-5-1": { "type": "paragraph", "chapter_id": "ch-1", "page_id": "page-5", "id": "p-ch-1-5-1" }
-  }
+  ]
 }
 ```
 
-You can now pick any `id` and generate questions only on that paragraph / question / page.
+## Notes
 
-## API
+- Marker gives excellent structure (headings hierarchy, reading order, images, tables).
+- The current UI renders blocks in reading order. It is content-faithful, not pixel-perfect PDF recreation.
+- For multiple chapters later we can add a chapter selector.
 
-### `POST /api/v1/parse`
+## Next improvements (when you want)
 
-- **Content-Type**: `multipart/form-data`
-- **Field**: `file` → the PDF
-- **Optional fields**:
-  - `title`
-  - `subject`
-  - `class`
-  - `chapter_number`
-
-**Example**
-
-```bash
-curl -X POST http://localhost:8080/api/v1/parse \
-  -F "file=@ncert_class10_science_ch1.pdf" \
-  -F "class=10" \
-  -F "subject=Science" \
-  -F "title=Chemical Reactions and Equations"
-```
-
-### `GET /health`
-
-## Running
-
-Requires:
-
-- Go 1.22+
-- `pdftotext` + `pdfinfo` (poppler-utils)
-- `mutool` (mupdf-tools) – optional but recommended
-
-```bash
-go run ./cmd/server
-# or
-go build -o ncert-parser ./cmd/server
-./ncert-parser
-```
-
-Env:
-
-- `PORT` (default 8080)
-- `TMP_DIR` (default system temp)
-
-## Roadmap (next iterations in the loop)
-
-- [ ] Proper image extraction + caption association (mutool extract + nearby text)
-- [ ] Better chapter boundary detection using font size / TOC
-- [ ] MCQ option parsing (A/B/C/D)
-- [ ] Marks detection ("[2 Marks]")
-- [ ] Hindi / bilingual support
-- [ ] Streaming / async job API for large books
-- [ ] Docker image
-- [ ] Benchmarks against real NCERT PDFs
-
-## License
-
-MIT
+- Better table rendering
+- Math equations with KaTeX
+- Multi-chapter support + TOC
+- Search inside chapter
