@@ -5,16 +5,12 @@ interface Props {
   block: Block;
   imagesBase?: string;
   compact?: boolean;
-  /** When true, wrap this text as callout body under Think and Reflect */
-  calloutBody?: boolean;
 }
 
-/** Convert Marker / LaTeX leftovers into readable book-like text + light HTML for superscripts */
 function formatText(raw?: string): string {
   if (!raw) return "";
   let t = raw;
 
-  // spacing / noise commands
   t = t.replace(/\\quad/g, " ");
   t = t.replace(/\\qquad/g, "  ");
   t = t.replace(/\\,/g, " ");
@@ -23,7 +19,6 @@ function formatText(raw?: string): string {
   t = t.replace(/\\ /g, " ");
   t = t.replace(/~/g, " ");
 
-  // operators
   t = t.replace(/\\times/g, "×");
   t = t.replace(/\\div/g, "÷");
   t = t.replace(/\\geq/g, "≥");
@@ -38,7 +33,6 @@ function formatText(raw?: string): string {
   t = t.replace(/\\approx/g, "≈");
   t = t.replace(/\\equiv/g, "≡");
 
-  // degree / circ — °C °F
   t = t.replace(/\^\{\\circ\}/g, "°");
   t = t.replace(/\^\\circ/g, "°");
   t = t.replace(/\\circ/g, "°");
@@ -51,12 +45,10 @@ function formatText(raw?: string): string {
   t = t.replace(/°\s*C/g, "°C");
   t = t.replace(/°\s*F/g, "°F");
 
-  // currency
   t = t.replace(/\\rupee\{?\}?/gi, "₹");
   t = t.replace(/\\Rs\.?/gi, "₹");
   t = t.replace(/\$\\mathrm\{Rs\}\$/gi, "₹");
 
-  // text wrappers
   t = t.replace(/\\mathrm\{([^}]+)\}/g, "$1");
   t = t.replace(/\\text\{([^}]+)\}/g, "$1");
   t = t.replace(/\\textbf\{([^}]+)\}/g, "$1");
@@ -67,37 +59,27 @@ function formatText(raw?: string): string {
   t = t.replace(/\\left\[/g, "[");
   t = t.replace(/\\right\]/g, "]");
 
-  // ordinals
   t = t.replace(/n\^\{?th\}?/gi, "nᵗʰ");
   t = t.replace(/\^\{th\}/gi, "ᵗʰ");
   t = t.replace(/\^\{st\}/gi, "ˢᵗ");
   t = t.replace(/\^\{nd\}/gi, "ⁿᵈ");
   t = t.replace(/\^\{rd\}/gi, "ʳᵈ");
 
-  // simple superscripts: x^2, x^{10}, a^n → HTML <sup>
-  // do this before stripping braces carelessly
   t = t.replace(/([A-Za-z0-9)])\^\{([^}]+)\}/g, "$1<sup>$2</sup>");
   t = t.replace(/([A-Za-z0-9)])\^([A-Za-z0-9]+)/g, "$1<sup>$2</sup>");
-
-  // subscripts: x_1, x_{12}
   t = t.replace(/([A-Za-z0-9)])_\{([^}]+)\}/g, "$1<sub>$2</sub>");
   t = t.replace(/([A-Za-z0-9)])_([A-Za-z0-9]+)/g, "$1<sub>$2</sub>");
 
-  // strip remaining $...$
   t = t.replace(/\$([^$]*)\$/g, "$1");
-
-  // leftover braces that are empty noise (careful not to break HTML tags)
   t = t.replace(/(?<![<\/])\{(?![^<]*>)/g, "");
   t = t.replace(/(?<![<\/])\}(?![^<]*>)/g, "");
 
-  // whitespace
   t = t.replace(/[ \t]+\n/g, "\n");
   t = t.replace(/\n{3,}/g, "\n\n");
   t = t.replace(/[ \t]{2,}/g, " ");
   return t.trim();
 }
 
-/** Render text that may contain <sup>/<sub> as safe HTML */
 function RichText({ text, className }: { text: string; className?: string }) {
   const hasHtml = /<sup>|<sub>/.test(text);
   if (hasHtml) {
@@ -130,26 +112,16 @@ function isExerciseTitle(text: string): boolean {
   return /exercise\s*set/i.test(text) || /^exercise\s*\d/i.test(text);
 }
 
-/**
- * If Marker dumped several numbered questions into one text blob,
- * split them into separate items: "1. ... 2. ... 3. ..."
- */
 function splitNumberedItems(text: string): string[] | null {
-  // Must start with 1. or 1)
   if (!/^\s*1[\.\)]\s/.test(text)) return null;
-
-  // Split on " 2. " / " 3. " etc when they look like new items
   const parts = text.split(/(?=\s[2-9]\d*[\.)]\s)|(?=\s1\d[\.)]\s)/);
   const items = parts.map((p) => p.trim()).filter(Boolean);
-
-  // Only treat as list if we got multiple real items
   if (items.length < 2) return null;
-  // each should start with a number
   if (!items.every((it) => /^\d+[\.)]\s/.test(it))) return null;
   return items;
 }
 
-export default function BlockRenderer({ block, imagesBase = "data", compact = false }: Props) {
+export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
   const type = (block.type || "").toLowerCase();
   const text = formatText(block.text);
 
@@ -193,7 +165,7 @@ export default function BlockRenderer({ block, imagesBase = "data", compact = fa
     );
   }
 
-  // ---------- Images ----------
+  // ---------- Images + caption (always centered as one unit) ----------
   if (
     type.includes("picture") ||
     type.includes("figure") ||
@@ -203,21 +175,30 @@ export default function BlockRenderer({ block, imagesBase = "data", compact = fa
     if (block.image) {
       const src = imageSrc(block.image, imagesBase);
       return (
-        <figure className="my-5 text-center">
+        <figure className="my-6 mx-auto flex flex-col items-center text-center max-w-full">
           <img
             src={src}
             alt={text || "Figure"}
-            className="max-w-full h-auto mx-auto rounded-sm border border-[#ddd5c4] shadow-sm bg-white"
+            className="max-w-full h-auto rounded-sm border border-[#ddd5c4] shadow-sm bg-white"
             loading="lazy"
           />
           {text && (
-            <figcaption className="text-sm text-[#6b6355] mt-2 font-serif italic leading-relaxed">
+            <figcaption className="mt-2 max-w-prose text-sm text-[#6b6355] font-serif italic leading-relaxed text-center px-2">
               <RichText text={text} />
             </figcaption>
           )}
         </figure>
       );
     }
+  }
+
+  // ---------- Standalone caption (orphan) — still centered ----------
+  if (type.includes("caption")) {
+    return (
+      <p className="my-2 text-center text-sm text-[#6b6355] font-serif italic leading-relaxed">
+        <RichText text={text} />
+      </p>
+    );
   }
 
   // ---------- Tables ----------
@@ -257,7 +238,6 @@ export default function BlockRenderer({ block, imagesBase = "data", compact = fa
   }
 
   if (type.includes("listitem") || type === "list_item") {
-    // Try to extract leading number "1." / "2)"
     const m = text.match(/^(\d+)[\.)]\s*([\s\S]*)$/);
     const num = m?.[1];
     const body = m ? m[2] : text;
@@ -286,7 +266,7 @@ export default function BlockRenderer({ block, imagesBase = "data", compact = fa
     );
   }
 
-  if (type.includes("caption") || type.includes("footnote")) {
+  if (type.includes("footnote")) {
     return (
       <p className="my-2 text-sm text-[#6b6355] font-serif italic leading-relaxed whitespace-pre-wrap">
         <RichText text={text} />
@@ -300,7 +280,6 @@ export default function BlockRenderer({ block, imagesBase = "data", compact = fa
 
   // ---------- Text / Paragraph ----------
   if (text) {
-    // Split merged exercise lists: "1. ... 2. ... 3. ..."
     const items = splitNumberedItems(text);
     if (items) {
       return (
@@ -323,10 +302,6 @@ export default function BlockRenderer({ block, imagesBase = "data", compact = fa
     }
 
     const isExample = /^example\s*\d+/i.test(text.replace(/<[^>]+>/g, ""));
-
-    // Heuristic: short question after callout title often is "Think and Reflect" body.
-    // We can't know previous sibling easily here, so style short standalone questions
-    // that look like reflection prompts with a light bordered box.
     const plain = text.replace(/<[^>]+>/g, "");
     const looksLikeCalloutBody =
       plain.length < 220 &&
@@ -355,9 +330,7 @@ export default function BlockRenderer({ block, imagesBase = "data", compact = fa
             <strong className="text-[#8b2942]">
               <RichText text={text.split(":")[0]} />:
             </strong>
-            {text.includes(":") ? (
-              <RichText text={text.slice(text.indexOf(":") + 1)} />
-            ) : null}
+            {text.includes(":") ? <RichText text={text.slice(text.indexOf(":") + 1)} /> : null}
           </>
         ) : (
           <RichText text={text} />

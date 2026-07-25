@@ -9,9 +9,51 @@ interface Props {
   imagesBase: string;
 }
 
+function isImageBlock(b: Block): boolean {
+  const t = (b.type || "").toLowerCase();
+  return t.includes("picture") || t.includes("figure") || t.includes("image") || t.includes("diagram");
+}
+
+function isCaptionBlock(b: Block): boolean {
+  const t = (b.type || "").toLowerCase();
+  if (t.includes("caption")) return true;
+  // Marker sometimes emits Fig. as plain Text
+  const text = (b.text || "").trim();
+  return /^(fig\.?|figure)\s*\d/i.test(text);
+}
+
 /**
- * Get [minX, minY, maxX, maxY] from either rel box or bbox.
+ * Merge a following caption into the image block so they render as one unit
+ * (caption always under the image, centered).
  */
+function attachCaptions(blocks: Block[]): Block[] {
+  const out: Block[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const cur = blocks[i];
+    const next = blocks[i + 1];
+
+    if (isImageBlock(cur) && next && isCaptionBlock(next)) {
+      const captionText = (next.text || "").trim();
+      out.push({
+        ...cur,
+        // prefer explicit caption; don't overwrite if image already has text that isn't a path
+        text: captionText || cur.text,
+      });
+      i++; // skip caption block
+      continue;
+    }
+
+    // orphan caption with no image above — still show centered as caption
+    if (isCaptionBlock(cur) && !isImageBlock(cur)) {
+      out.push({ ...cur, type: "Caption" });
+      continue;
+    }
+
+    out.push(cur);
+  }
+  return out;
+}
+
 function boundsOf(block: Block): { x1: number; y1: number; x2: number; y2: number } | null {
   if (block.rel) {
     return {
@@ -27,11 +69,6 @@ function boundsOf(block: Block): { x1: number; y1: number; x2: number; y2: numbe
   return null;
 }
 
-/**
- * Group consecutive blocks that sit side-by-side (similar Y, different X)
- * into rows. Everything else stays single-column sequential.
- * This avoids absolute-position overlaps while preserving two-column layouts.
- */
 function groupRows(blocks: Block[]): Block[][] {
   if (blocks.length === 0) return [];
 
@@ -42,7 +79,6 @@ function groupRows(blocks: Block[]): Block[][] {
     return blocks.map((b) => [b]);
   }
 
-  // Work in reading order (already correct from Marker), only merge side-by-side neighbors
   const rows: Block[][] = [];
   let i = 0;
   while (i < items.length) {
@@ -60,7 +96,6 @@ function groupRows(blocks: Block[]): Block[][] {
 
       const sideBySide = next.bounds.x1 >= cur.bounds.x2 - 2 || cur.bounds.x1 >= next.bounds.x2 - 2;
 
-      // only group if clearly side-by-side and not stacked
       if (sameBand && sideBySide && Math.abs(cur.bounds.x1 - next.bounds.x1) > 15) {
         row.push(next.b);
         j++;
@@ -69,7 +104,6 @@ function groupRows(blocks: Block[]): Block[][] {
       }
     }
 
-    // sort row left-to-right
     if (row.length > 1) {
       row.sort((a, b) => {
         const ba = boundsOf(a);
@@ -86,7 +120,7 @@ function groupRows(blocks: Block[]): Block[][] {
 }
 
 export default function PageView({ page, imagesBase }: Props) {
-  const blocks = page.blocks || [];
+  const blocks = attachCaptions(page.blocks || []);
   const rows = groupRows(blocks);
 
   return (
