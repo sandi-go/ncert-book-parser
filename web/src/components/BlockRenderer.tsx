@@ -4,7 +4,8 @@ import { Block } from "../types/book";
 interface Props {
   block: Block;
   imagesBase?: string;
-  compact?: boolean;
+  /** Render without outer margins (inside callout) */
+  nested?: boolean;
 }
 
 function formatText(raw?: string): string {
@@ -94,20 +95,6 @@ function imageSrc(image: string, imagesBase: string): string {
   return `/${base}/${image}`.replace(/\/+/g, "/");
 }
 
-function isCalloutTitle(text: string): boolean {
-  const t = text.toLowerCase().replace(/[^a-z\s]/g, "").trim();
-  return (
-    t === "think and reflect" ||
-    t.startsWith("think and reflect") ||
-    t === "try these" ||
-    t.startsWith("try these") ||
-    t === "note" ||
-    t === "remark" ||
-    t.startsWith("do this") ||
-    t.startsWith("activity")
-  );
-}
-
 function isExerciseTitle(text: string): boolean {
   return /exercise\s*set/i.test(text) || /^exercise\s*\d/i.test(text);
 }
@@ -121,9 +108,70 @@ function splitNumberedItems(text: string): string[] | null {
   return items;
 }
 
-export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
+function renderListItems(text: string) {
+  const items = splitNumberedItems(text);
+  if (items) {
+    return (
+      <ol>
+        {items.map((item, i) => {
+          const m = item.match(/^(\d+)[\.)]\s*([\s\S]*)$/);
+          const num = m?.[1] ?? String(i + 1);
+          const body = formatText(m?.[2] ?? item);
+          return (
+            <li key={i}>
+              <span className="font-semibold shrink-0 min-w-[1.25rem]">{num}.</span>
+              <RichText text={body} className="whitespace-pre-wrap" />
+            </li>
+          );
+        })}
+      </ol>
+    );
+  }
+
+  const m = text.match(/^(\d+)[\.)]\s*([\s\S]*)$/);
+  if (m) {
+    return (
+      <ol>
+        <li>
+          <span className="font-semibold shrink-0 min-w-[1.25rem]">{m[1]}.</span>
+          <RichText text={formatText(m[2])} className="whitespace-pre-wrap" />
+        </li>
+      </ol>
+    );
+  }
+
+  return (
+    <p>
+      <RichText text={text} />
+    </p>
+  );
+}
+
+export default function BlockRenderer({ block, imagesBase = "data", nested = false }: Props) {
   const type = (block.type || "").toLowerCase();
   const text = formatText(block.text);
+
+  // ---------- Full Callout box (Think and Reflect) ----------
+  if (type === "callout") {
+    const title = text || "Think and Reflect";
+    const children = block.children || [];
+    return (
+      <div className="callout-box">
+        <div className="callout-box-header">
+          <h3>{title}</h3>
+        </div>
+        <div className="callout-box-body">
+          {children.length > 0 ? (
+            children.map((child, i) => (
+              <BlockRenderer key={child.id || i} block={child} imagesBase={imagesBase} nested />
+            ))
+          ) : (
+            <p className="text-[#8a7f6a] italic text-sm"> </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // ---------- Headings ----------
   if (
@@ -132,18 +180,10 @@ export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
     type === "heading" ||
     type.includes("section_header")
   ) {
-    if (isCalloutTitle(text)) {
-      return (
-        <div className="mt-6 mb-0 rounded-t-md bg-[#f3c7a8] border border-[#e8b090] border-b-0 px-4 py-2">
-          <h3 className="font-serif font-bold text-[#8b2942] text-base m-0">{text}</h3>
-        </div>
-      );
-    }
-
     if (isExerciseTitle(text)) {
       return (
         <div className="mt-8 mb-4 flex justify-center">
-          <span className="inline-block bg-[#e8a0b0] text-[#6b1a2a] font-serif font-bold text-sm tracking-wide px-5 py-1.5 rounded-full uppercase">
+          <span className="inline-block bg-[#e8a0b0] text-[#6b1a2a] font-bold text-sm tracking-wide px-5 py-1.5 rounded-full uppercase">
             {text}
           </span>
         </div>
@@ -159,13 +199,13 @@ export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
     ];
     const Tag = (`h${level}` as "h1" | "h2" | "h3" | "h4");
     return (
-      <Tag className={`font-serif text-[#1a1520] leading-snug ${sizes[level - 1]}`}>
+      <Tag className={`text-[#1a1520] leading-snug ${sizes[level - 1]}`}>
         <RichText text={text} />
       </Tag>
     );
   }
 
-  // ---------- Images + caption (always centered as one unit) ----------
+  // ---------- Images ----------
   if (
     type.includes("picture") ||
     type.includes("figure") ||
@@ -183,7 +223,7 @@ export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
             loading="lazy"
           />
           {text && (
-            <figcaption className="mt-2 max-w-prose text-sm text-[#6b6355] font-serif italic leading-relaxed text-center px-2">
+            <figcaption className="mt-2 max-w-prose text-sm text-[#6b6355] italic leading-relaxed text-center px-2">
               <RichText text={text} />
             </figcaption>
           )}
@@ -192,10 +232,9 @@ export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
     }
   }
 
-  // ---------- Standalone caption (orphan) — still centered ----------
   if (type.includes("caption")) {
     return (
-      <p className="my-2 text-center text-sm text-[#6b6355] font-serif italic leading-relaxed">
+      <p className="my-2 text-center text-sm text-[#6b6355] italic leading-relaxed">
         <RichText text={text} />
       </p>
     );
@@ -223,16 +262,11 @@ export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
   // ---------- Lists ----------
   if (type.includes("listgroup") || type === "list") {
     return (
-      <ol className="my-4 ml-0 space-y-3 list-none">
+      <ol className={nested ? "" : "my-4 ml-0 space-y-3 list-none"}>
         {block.children?.map((child, i) => (
-          <BlockRenderer key={child.id || i} block={child} imagesBase={imagesBase} />
+          <BlockRenderer key={child.id || i} block={child} imagesBase={imagesBase} nested={nested} />
         ))}
-        {!block.children?.length && text && (
-          <li className="flex gap-2 text-[#2a2418] font-serif leading-7 text-[16px]">
-            <span className="text-[#8a7f6a] shrink-0">•</span>
-            <RichText text={text} className="whitespace-pre-wrap" />
-          </li>
-        )}
+        {!block.children?.length && text && renderListItems(text)}
       </ol>
     );
   }
@@ -243,14 +277,14 @@ export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
     const body = m ? m[2] : text;
 
     return (
-      <li className="flex gap-3 my-2 text-[#2a2418] font-serif leading-7 text-[16px]">
+      <li className={`flex gap-3 text-[#2a2418] leading-7 text-[16px] ${nested ? "my-1" : "my-2"}`}>
         <span className="text-[#5a5040] shrink-0 select-none font-semibold min-w-[1.5rem] text-right">
           {num ? `${num}.` : "•"}
         </span>
         <div className="min-w-0 flex-1">
           {body && <RichText text={body} className="whitespace-pre-wrap" />}
           {block.children?.map((child, i) => (
-            <BlockRenderer key={child.id || i} block={child} imagesBase={imagesBase} />
+            <BlockRenderer key={child.id || i} block={child} imagesBase={imagesBase} nested />
           ))}
         </div>
       </li>
@@ -260,7 +294,7 @@ export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
   // ---------- Equations ----------
   if (type.includes("equation") || type.includes("math") || type.includes("formula")) {
     return (
-      <div className="my-4 px-4 py-3 bg-[#f7f3ea] border-l-4 border-[#6b8cae] rounded-r text-center font-serif text-[#1a1520] text-lg leading-relaxed overflow-x-auto">
+      <div className="my-4 px-4 py-3 bg-[#f7f3ea] border-l-4 border-[#6b8cae] rounded-r text-center text-[#1a1520] text-lg leading-relaxed overflow-x-auto">
         <RichText text={text || formatText(block.html) || ""} className="whitespace-pre-wrap" />
       </div>
     );
@@ -268,7 +302,7 @@ export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
 
   if (type.includes("footnote")) {
     return (
-      <p className="my-2 text-sm text-[#6b6355] font-serif italic leading-relaxed whitespace-pre-wrap">
+      <p className="my-2 text-sm text-[#6b6355] italic leading-relaxed whitespace-pre-wrap">
         <RichText text={text} />
       </p>
     );
@@ -278,8 +312,13 @@ export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
     return null;
   }
 
-  // ---------- Text / Paragraph ----------
+  // ---------- Text ----------
   if (text) {
+    // Inside callout → render as list items when numbered
+    if (nested) {
+      return renderListItems(text);
+    }
+
     const items = splitNumberedItems(text);
     if (items) {
       return (
@@ -289,7 +328,7 @@ export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
             const num = m?.[1] ?? String(i + 1);
             const body = formatText(m?.[2] ?? item);
             return (
-              <li key={i} className="flex gap-3 text-[#2a2418] font-serif leading-7 text-[16px]">
+              <li key={i} className="flex gap-3 text-[#2a2418] leading-7 text-[16px]">
                 <span className="text-[#5a5040] shrink-0 font-semibold min-w-[1.5rem] text-right">
                   {num}.
                 </span>
@@ -302,26 +341,10 @@ export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
     }
 
     const isExample = /^example\s*\d+/i.test(text.replace(/<[^>]+>/g, ""));
-    const plain = text.replace(/<[^>]+>/g, "");
-    const looksLikeCalloutBody =
-      plain.length < 220 &&
-      /\?\s*$/.test(plain) &&
-      !/^\d+[\.)]/.test(plain) &&
-      !/^example/i.test(plain);
-
-    if (looksLikeCalloutBody) {
-      return (
-        <div className="mb-5 rounded-b-md border border-[#e8b090] border-t-0 bg-[#fdf6ef] px-4 py-3">
-          <p className="m-0 font-serif text-[#2a2418] leading-[1.75] text-[16px]">
-            <RichText text={text} />
-          </p>
-        </div>
-      );
-    }
 
     return (
       <p
-        className={`my-3 font-serif text-[#2a2418] leading-[1.75] text-[16px] whitespace-pre-wrap clear-both ${
+        className={`my-3 text-[#2a2418] leading-[1.75] text-[16px] whitespace-pre-wrap clear-both ${
           isExample ? "mt-5" : ""
         }`}
       >
@@ -342,7 +365,7 @@ export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
   if (block.html) {
     return (
       <div
-        className="my-3 font-serif text-[#2a2418] leading-[1.75] book-html text-[16px] clear-both"
+        className="my-3 text-[#2a2418] leading-[1.75] book-html text-[16px] clear-both"
         dangerouslySetInnerHTML={{ __html: block.html }}
       />
     );
@@ -352,7 +375,7 @@ export default function BlockRenderer({ block, imagesBase = "data" }: Props) {
     return (
       <div className="space-y-1">
         {block.children.map((child, i) => (
-          <BlockRenderer key={child.id || i} block={child} imagesBase={imagesBase} />
+          <BlockRenderer key={child.id || i} block={child} imagesBase={imagesBase} nested={nested} />
         ))}
       </div>
     );

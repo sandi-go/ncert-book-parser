@@ -17,15 +17,56 @@ function isImageBlock(b: Block): boolean {
 function isCaptionBlock(b: Block): boolean {
   const t = (b.type || "").toLowerCase();
   if (t.includes("caption")) return true;
-  // Marker sometimes emits Fig. as plain Text
   const text = (b.text || "").trim();
   return /^(fig\.?|figure)\s*\d/i.test(text);
 }
 
-/**
- * Merge a following caption into the image block so they render as one unit
- * (caption always under the image, centered).
- */
+function isCalloutTitleBlock(b: Block): boolean {
+  const t = (b.type || "").toLowerCase();
+  const text = (b.text || "").toLowerCase().replace(/[^a-z\s]/g, "").trim();
+  const isHeader =
+    t.includes("sectionheader") ||
+    t.includes("title") ||
+    t === "heading" ||
+    t.includes("section_header") ||
+    t.includes("text");
+  if (!isHeader && !text) return false;
+  return (
+    text === "think and reflect" ||
+    text.startsWith("think and reflect") ||
+    text === "try these" ||
+    text.startsWith("try these") ||
+    text.startsWith("do this") ||
+    text.startsWith("activity")
+  );
+}
+
+function isCalloutStopBlock(b: Block): boolean {
+  const t = (b.type || "").toLowerCase();
+  const text = (b.text || "").trim();
+
+  if (isCalloutTitleBlock(b)) return true;
+  if (isImageBlock(b)) return true;
+  if (t.includes("table")) return true;
+
+  // new section / example / exercise ends the callout
+  if (/^example\s*\d+/i.test(text)) return true;
+  if (/exercise\s*set/i.test(text)) return true;
+  if (/^\d+\.\d+/i.test(text) && text.length < 80) return true; // 2.6 VISUALISING...
+
+  if (
+    t.includes("sectionheader") ||
+    t.includes("title") ||
+    t === "heading" ||
+    t.includes("section_header")
+  ) {
+    // another heading that's not a callout title
+    if (!isCalloutTitleBlock(b)) return true;
+  }
+
+  return false;
+}
+
 function attachCaptions(blocks: Block[]): Block[] {
   const out: Block[] = [];
   for (let i = 0; i < blocks.length; i++) {
@@ -36,20 +77,50 @@ function attachCaptions(blocks: Block[]): Block[] {
       const captionText = (next.text || "").trim();
       out.push({
         ...cur,
-        // prefer explicit caption; don't overwrite if image already has text that isn't a path
         text: captionText || cur.text,
       });
-      i++; // skip caption block
+      i++;
       continue;
     }
 
-    // orphan caption with no image above — still show centered as caption
     if (isCaptionBlock(cur) && !isImageBlock(cur)) {
       out.push({ ...cur, type: "Caption" });
       continue;
     }
 
     out.push(cur);
+  }
+  return out;
+}
+
+/**
+ * Group "Think and Reflect" title + following body blocks into one virtual Callout block
+ * so the UI can draw a single bordered box like the textbook.
+ */
+function groupCallouts(blocks: Block[]): Block[] {
+  const out: Block[] = [];
+  let i = 0;
+  while (i < blocks.length) {
+    const cur = blocks[i];
+    if (isCalloutTitleBlock(cur)) {
+      const title = (cur.text || "Think and Reflect").trim();
+      const body: Block[] = [];
+      let j = i + 1;
+      while (j < blocks.length && !isCalloutStopBlock(blocks[j])) {
+        body.push(blocks[j]);
+        j++;
+      }
+      out.push({
+        id: cur.id || `callout-${i}`,
+        type: "Callout",
+        text: title,
+        children: body,
+      });
+      i = j;
+      continue;
+    }
+    out.push(cur);
+    i++;
   }
   return out;
 }
@@ -83,11 +154,19 @@ function groupRows(blocks: Block[]): Block[][] {
   let i = 0;
   while (i < items.length) {
     const cur = items[i];
+    // Callouts always take full width alone
+    if ((cur.b.type || "").toLowerCase() === "callout") {
+      rows.push([cur.b]);
+      i++;
+      continue;
+    }
+
     const row: Block[] = [cur.b];
     let j = i + 1;
 
     while (j < items.length) {
       const next = items[j];
+      if ((next.b.type || "").toLowerCase() === "callout") break;
       if (!cur.bounds || !next.bounds) break;
 
       const sameBand =
@@ -120,7 +199,7 @@ function groupRows(blocks: Block[]): Block[][] {
 }
 
 export default function PageView({ page, imagesBase }: Props) {
-  const blocks = attachCaptions(page.blocks || []);
+  const blocks = groupCallouts(attachCaptions(page.blocks || []));
   const rows = groupRows(blocks);
 
   return (

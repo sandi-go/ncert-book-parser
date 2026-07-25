@@ -13,13 +13,14 @@ html {
 body {
   background: #e8e4db;
   color: var(--ink);
-  font-family: Georgia, "Times New Roman", Times, serif;
+  font-family: var(--font-serif), "Source Serif 4", Georgia, "Times New Roman", Times, serif;
   -webkit-font-smoothing: antialiased;
 }
 
 .book-page {
   display: block;
   line-height: 1.75;
+  font-family: var(--font-serif), "Source Serif 4", Georgia, serif;
 }
 
 .block-row.single {
@@ -27,11 +28,56 @@ body {
   margin: 0;
 }
 
-.block-row.single + .block-row.single {
-  /* natural paragraph rhythm handled by BlockRenderer margins */
+/* Think and Reflect full box */
+.callout-box {
+  margin: 1.5rem 0;
+  border: 1px solid #e0a882;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fdf4ec;
 }
 
-/* Textbook table styling — critical for no-overlap */
+.callout-box-header {
+  background: #f0c4a0;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid #e0a882;
+}
+
+.callout-box-header h3 {
+  margin: 0;
+  font-family: var(--font-serif), Georgia, serif;
+  font-weight: 700;
+  color: #8b2942;
+  font-size: 1.05rem;
+}
+
+.callout-box-body {
+  padding: 0.85rem 1rem 1rem;
+  background: #fdf6ef;
+}
+
+.callout-box-body p,
+.callout-box-body li {
+  margin: 0.4rem 0;
+  font-family: var(--font-serif), Georgia, serif;
+  color: #2a2418;
+  line-height: 1.7;
+  font-size: 0.98rem;
+}
+
+.callout-box-body ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.callout-box-body li {
+  display: flex;
+  gap: 0.6rem;
+  margin: 0.55rem 0;
+}
+
+/* Textbook table */
 .book-table {
   display: block;
   width: 100%;
@@ -41,7 +87,7 @@ body {
 .book-table table {
   width: 100%;
   border-collapse: collapse;
-  font-family: Georgia, serif;
+  font-family: var(--font-serif), Georgia, serif;
   font-size: 0.92rem;
   background: #fff;
 }
@@ -71,14 +117,12 @@ body {
   background: #f3ebe0;
 }
 
-/* Marker HTML blobs */
 .book-html p {
   margin: 0.75rem 0;
   line-height: 1.75;
 }
 
 .book-html img {
-  max-w-full: 100%;
   max-width: 100%;
   height: auto;
   margin: 1rem auto;
