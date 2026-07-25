@@ -11,7 +11,12 @@ interface Props {
 
 function isImageBlock(b: Block): boolean {
   const t = (b.type || "").toLowerCase();
-  return t.includes("picture") || t.includes("figure") || t.includes("image") || t.includes("diagram");
+  return (
+    t.includes("picture") ||
+    t.includes("figure") ||
+    t.includes("image") ||
+    t.includes("diagram")
+  );
 }
 
 function isCaptionBlock(b: Block): boolean {
@@ -19,6 +24,11 @@ function isCaptionBlock(b: Block): boolean {
   if (t.includes("caption")) return true;
   const text = (b.text || "").trim();
   return /^(fig\.?|figure)\s*\d/i.test(text);
+}
+
+function isListBlock(b: Block): boolean {
+  const t = (b.type || "").toLowerCase();
+  return t.includes("listgroup") || t === "list" || t.includes("listitem");
 }
 
 function isCalloutTitleBlock(b: Block): boolean {
@@ -34,20 +44,12 @@ function isCalloutTitleBlock(b: Block): boolean {
   );
 }
 
-/** Prompt / question style typical inside NCERT callout boxes */
 function looksLikeCalloutPrompt(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
-
-  // explicit question
-  if (/\?\s*$/.test(t)) return true;
-  if ((t.match(/\?/g) || []).length >= 1 && t.length < 320) return true;
-
-  // numbered / roman list of questions
+  if (/\?/.test(t) && t.length < 400) return true;
   if (/^\d+\s*[\.)]/.test(t)) return true;
   if (/^\(\s*(?:i|ii|iii|iv|v)\s*\)/i.test(t)) return true;
-
-  // imperative / reflective openers used in Think and Reflect
   if (
     /^(can you|could you|what |how |why |which |when |where |predict |identify |find |write |list |draw |complete |observe |try |do you|is there|are there|using )/i.test(
       t
@@ -55,39 +57,37 @@ function looksLikeCalloutPrompt(text: string): boolean {
   ) {
     return true;
   }
-
   return false;
 }
 
-/** Explanatory textbook narrative that sits OUTSIDE the peach box */
 function looksLikeNarrative(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
-
   if (
-    /^(note that|thus[, ]|therefore[, ]|hence[, ]|we observe|observe that|in this chapter|as we have|let us|now we|each |the table|the polynomial|this leads|to generalise|for example|also,|further,|in term)/i.test(
+    /^(note that|thus[, ]|therefore[, ]|hence[, ]|we observe|observe that|in this chapter|as we have|let us|now we|each |the table|the polynomial|this leads|to generalise|for example|also,|further,|in term|example \d)/i.test(
       t
     )
   ) {
     return true;
   }
-
-  // long paragraph without any question mark → almost always body text
-  if (t.length > 140 && !t.includes("?") && !/^\d+\s*[\.)]/.test(t)) {
-    return true;
-  }
-
+  if (t.length > 160 && !t.includes("?") && !/^\d+\s*[\.)]/.test(t)) return true;
   return false;
 }
 
+/**
+ * Right after "Think and Reflect", only these belong in the box:
+ * - ListGroup / List / ListItem (Marker often puts questions here with empty parent text)
+ * - short Text prompts/questions
+ */
 function isCalloutBodyBlock(b: Block): boolean {
   const t = (b.type || "").toLowerCase();
   const text = (b.text || "").trim();
-  if (!text) return false;
 
   if (isCalloutTitleBlock(b)) return false;
   if (isImageBlock(b) || isCaptionBlock(b)) return false;
   if (t.includes("table")) return false;
+  if (t.includes("picturegroup") || t.includes("figuregroup")) return false;
+
   if (/^example\s*\d+/i.test(text)) return false;
   if (/exercise\s*set/i.test(text)) return false;
   if (/^\d+\.\d+\s/i.test(text) && text.length < 100) return false;
@@ -101,11 +101,41 @@ function isCalloutBodyBlock(b: Block): boolean {
     return false;
   }
 
-  // hard reject narrative
-  if (looksLikeNarrative(text)) return false;
+  // Marker structure from your JSON: ListGroup is THE body of Think and Reflect
+  if (isListBlock(b)) return true;
 
-  // only accept clear prompts / questions / lists
-  return looksLikeCalloutPrompt(text);
+  // Text only if it looks like a prompt, not narrative
+  if (text) {
+    if (looksLikeNarrative(text)) return false;
+    return looksLikeCalloutPrompt(text);
+  }
+
+  return false;
+}
+
+/** Flatten PictureGroup/FigureGroup → Picture + Caption at top level */
+function flattenGroups(blocks: Block[]): Block[] {
+  const out: Block[] = [];
+  for (const b of blocks) {
+    const t = (b.type || "").toLowerCase();
+    if ((t.includes("picturegroup") || t.includes("figuregroup")) && b.children?.length) {
+      // prefer merging caption into picture
+      let picture: Block | null = null;
+      let caption: string | undefined;
+      for (const c of b.children) {
+        if (isImageBlock(c)) picture = { ...c };
+        else if (isCaptionBlock(c)) caption = c.text;
+        else out.push(c);
+      }
+      if (picture) {
+        if (caption) picture = { ...picture, text: caption };
+        out.push(picture);
+      }
+      continue;
+    }
+    out.push(b);
+  }
+  return out;
 }
 
 function attachCaptions(blocks: Block[]): Block[] {
@@ -115,10 +145,9 @@ function attachCaptions(blocks: Block[]): Block[] {
     const next = blocks[i + 1];
 
     if (isImageBlock(cur) && next && isCaptionBlock(next)) {
-      const captionText = (next.text || "").trim();
       out.push({
         ...cur,
-        text: captionText || cur.text,
+        text: (next.text || "").trim() || cur.text,
       });
       i++;
       continue;
@@ -143,10 +172,16 @@ function groupCallouts(blocks: Block[]): Block[] {
       const title = (cur.text || "Think and Reflect").trim();
       const body: Block[] = [];
       let j = i + 1;
+      // Take consecutive body blocks only (usually 1 ListGroup or 1 Text)
       while (j < blocks.length && isCalloutBodyBlock(blocks[j])) {
         body.push(blocks[j]);
         j++;
-        if (body.length >= 5) break;
+        // one ListGroup is enough; don't keep swallowing
+        if (isListBlock(body[body.length - 1]) && body.length >= 1) {
+          // allow a second short text prompt, then stop
+          if (body.length >= 2) break;
+        }
+        if (body.length >= 4) break;
       }
       out.push({
         id: cur.id || `callout-${i}`,
@@ -236,7 +271,7 @@ function groupRows(blocks: Block[]): Block[][] {
 }
 
 export default function PageView({ page, imagesBase }: Props) {
-  const blocks = groupCallouts(attachCaptions(page.blocks || []));
+  const blocks = groupCallouts(attachCaptions(flattenGroups(page.blocks || [])));
   const rows = groupRows(blocks);
 
   return (
