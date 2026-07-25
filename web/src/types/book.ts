@@ -21,3 +21,10 @@ export interface Book {
   pages: Page[];
   images_base_path?: string;
 }
+
+export interface ChapterMeta {
+  filename: string;
+  title: string;
+  total_pages: number;
+  source_file?: string;
+}

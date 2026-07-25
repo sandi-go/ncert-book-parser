@@ -1,12 +1,67 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f5f5f4;
-  --foreground: #171717;
+  --page-bg: #fffcf5;
+  --ink: #2a2418;
+  --muted: #6b6355;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #e8e4db;
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", Times, serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Textbook table styling */
+.book-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: Georgia, serif;
+  font-size: 0.95rem;
+}
+
+.book-table th,
+.book-table td {
+  border: 1px solid #d4cbb8;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.book-table th {
+  background: #f0ebe0;
+  font-weight: 600;
+}
+
+.book-table tr:nth-child(even) td {
+  background: #faf7f0;
+}
+
+/* Marker HTML blobs */
+.book-html p {
+  margin: 0.75rem 0;
+  line-height: 1.75;
+}
+
+.book-html img {
+  max-width: 100%;
+  height: auto;
+  margin: 1rem auto;
+  display: block;
+}
+
+.book-page {
+  /* avoid accidental flex collapse */
+  display: block;
+}
+
+/* number inputs without spinners looking weird */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  opacity: 0.5;
 }
