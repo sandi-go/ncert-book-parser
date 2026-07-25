@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
-import BookReader from "@/components/BookReader";
-import { Book } from "@/types/book";
+import BookReader from "../components/BookReader";
+import { Book } from "../types/book";
 
 async function getBook(): Promise<Book | null> {
   const dataDir = path.join(process.cwd(), "public", "data");

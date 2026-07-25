@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Book } from "@/types/book";
+import { Book } from "../types/book";
 import BlockRenderer from "./BlockRenderer";
 
 interface Props {

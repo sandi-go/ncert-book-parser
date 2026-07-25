@@ -1,5 +1,5 @@
 import React from "react";
-import { Block } from "@/types/book";
+import { Block } from "../types/book";
 
 interface Props {
   block: Block;
