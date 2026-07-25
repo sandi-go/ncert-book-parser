@@ -1,3 +1,10 @@
+export interface RelBox {
+  x: number; // % from left
+  y: number; // % from top
+  w: number; // % width
+  h: number; // % height
+}
+
 export interface Block {
   id?: string;
   type: string;
@@ -5,13 +12,16 @@ export interface Block {
   html?: string;
   level?: number;
   image?: string;
-  bbox?: number[][];
+  bbox?: number[]; // [x1,y1,x2,y2]
+  rel?: RelBox;
   children?: Block[];
 }
 
 export interface Page {
   page_number: number;
   blocks: Block[];
+  bbox?: number[];
+  aspect?: number; // width/height
 }
 
 export interface Book {

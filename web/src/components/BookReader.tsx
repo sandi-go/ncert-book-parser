@@ -21,7 +21,6 @@ export default function BookReader({
   const total = book.total_pages || book.pages?.length || 0;
   const page = book.pages?.[currentPage];
 
-  // Reset to page 1 when chapter changes
   useEffect(() => {
     setCurrentPage(0);
   }, [selectedFilename]);
@@ -29,7 +28,6 @@ export default function BookReader({
   const goPrev = () => setCurrentPage((p) => Math.max(0, p - 1));
   const goNext = () => setCurrentPage((p) => Math.min(total - 1, p + 1));
 
-  // Keyboard navigation
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") goPrev();
@@ -41,13 +39,10 @@ export default function BookReader({
 
   return (
     <div className="min-h-screen bg-[#e8e4db]">
-      {/* Top bar */}
       <header className="bg-[#2c2416] text-[#f5f0e6] sticky top-0 z-20 shadow-md">
         <div className="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3 justify-between">
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <span className="text-xs uppercase tracking-widest text-[#c4b89a] shrink-0">
-              NCERT
-            </span>
+            <span className="text-xs uppercase tracking-widest text-[#c4b89a] shrink-0">NCERT</span>
             <select
               value={selectedFilename}
               onChange={(e) => onSelectChapter(e.target.value)}
@@ -66,21 +61,16 @@ export default function BookReader({
         </div>
       </header>
 
-      {/* Page */}
       <main className="max-w-4xl mx-auto px-3 sm:px-6 py-8 pb-28">
-        <div className="bg-[#fffcf5] shadow-[0_2px_20px_rgba(0,0,0,0.12)] rounded-sm border border-[#ddd5c4] min-h-[75vh]">
-          {/* page number ribbon */}
+        <div className="bg-[#fffcf5] shadow-[0_2px_20px_rgba(0,0,0,0.12)] rounded-sm border border-[#ddd5c4] min-h-[70vh]">
           <div className="border-b border-[#ebe4d4] px-6 py-2 flex justify-between text-xs text-[#8a7f6a]">
             <span className="font-serif italic truncate max-w-[70%]">{book.title}</span>
             <span className="tabular-nums">{page?.page_number ?? currentPage + 1}</span>
           </div>
 
-          <div className="px-6 sm:px-10 py-8">
-            {page?.blocks?.length ? (
-              <PageView
-                blocks={page.blocks}
-                imagesBase={book.images_base_path || "data/images"}
-              />
+          <div className="px-4 sm:px-8 py-6">
+            {page ? (
+              <PageView page={page} imagesBase={book.images_base_path || "data"} />
             ) : (
               <p className="text-[#a39880] italic text-center py-20">No content on this page.</p>
             )}
@@ -88,7 +78,6 @@ export default function BookReader({
         </div>
       </main>
 
-      {/* Footer pagination */}
       <footer className="fixed bottom-0 left-0 right-0 bg-[#2c2416] text-[#f5f0e6] border-t border-[#4a3d28] z-20">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <button

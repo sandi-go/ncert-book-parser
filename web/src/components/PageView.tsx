@@ -1,109 +1,81 @@
 "use client";
 
 import React from "react";
-import { Block } from "../types/book";
+import { Block, Page } from "../types/book";
 import BlockRenderer from "./BlockRenderer";
 
 interface Props {
-  blocks: Block[];
+  page: Page;
   imagesBase: string;
 }
 
-/** Get approximate [minX, minY, maxX, maxY] from polygon bbox */
-function getBounds(bbox?: number[][]): { minX: number; minY: number; maxX: number; maxY: number } | null {
-  if (!bbox || bbox.length < 2) return null;
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const pt of bbox) {
-    if (!pt || pt.length < 2) continue;
-    minX = Math.min(minX, pt[0]);
-    minY = Math.min(minY, pt[1]);
-    maxX = Math.max(maxX, pt[0]);
-    maxY = Math.max(maxY, pt[1]);
-  }
-  if (!isFinite(minX)) return null;
-  return { minX, minY, maxX, maxY };
-}
-
 /**
- * Group blocks into rows when they sit side-by-side (similar Y, different X).
- * Falls back to sequential single-column if no bbox data.
+ * Accurate placement mode:
+ * If enough blocks have `rel` percentages, render them inside a
+ * position:relative page using absolute positioning — preserves
+ * left/right columns and vertical spacing from the PDF.
+ *
+ * Fallback: sequential flow with smart row grouping.
  */
-function groupIntoRows(blocks: Block[]): Block[][] {
-  const withBounds = blocks.map((b, i) => ({
-    block: b,
-    bounds: getBounds(b.bbox),
-    index: i,
-  }));
+export default function PageView({ page, imagesBase }: Props) {
+  const blocks = page.blocks || [];
+  const withRel = blocks.filter((b) => b.rel && b.rel.w > 0 && b.rel.h > 0);
+  const useAbsolute = withRel.length >= Math.max(2, blocks.length * 0.4);
 
-  // If almost no bbox info, just sequential
-  const hasBbox = withBounds.filter((x) => x.bounds).length > blocks.length * 0.3;
-  if (!hasBbox) {
-    return blocks.map((b) => [b]);
-  }
+  const aspect = page.aspect && page.aspect > 0 ? page.aspect : 0.707; // A4-ish default
+  // height as % of width container → padding-bottom trick
+  const heightPct = (1 / aspect) * 100;
 
-  // Sort by top Y then left X
-  const sorted = [...withBounds].sort((a, b) => {
-    const ay = a.bounds?.minY ?? a.index * 1000;
-    const by = b.bounds?.minY ?? b.index * 1000;
-    if (Math.abs(ay - by) > 18) return ay - by;
-    const ax = a.bounds?.minX ?? 0;
-    const bx = b.bounds?.minX ?? 0;
-    return ax - bx;
-  });
-
-  const rows: typeof withBounds[] = [];
-  let currentRow: typeof withBounds = [];
-  let currentY: number | null = null;
-
-  for (const item of sorted) {
-    const y = item.bounds?.minY ?? null;
-    if (currentY === null || y === null || Math.abs(y - currentY) <= 22) {
-      currentRow.push(item);
-      if (y !== null) currentY = currentY === null ? y : Math.min(currentY, y);
-    } else {
-      if (currentRow.length) rows.push(currentRow);
-      currentRow = [item];
-      currentY = y;
-    }
-  }
-  if (currentRow.length) rows.push(currentRow);
-
-  return rows.map((row) =>
-    row
-      .sort((a, b) => (a.bounds?.minX ?? 0) - (b.bounds?.minX ?? 0))
-      .map((x) => x.block)
-  );
-}
-
-export default function PageView({ blocks, imagesBase }: Props) {
-  const rows = groupIntoRows(blocks);
-
-  return (
-    <div className="book-page space-y-1">
-      {rows.map((row, ri) => {
-        const multi = row.length > 1;
-        return (
-          <div
-            key={ri}
-            className={
-              multi
-                ? "grid gap-6 my-3 items-start"
-                : "my-1"
+  if (useAbsolute) {
+    return (
+      <div
+        className="relative w-full bg-transparent"
+        style={{ paddingBottom: `${heightPct}%` }}
+      >
+        <div className="absolute inset-0">
+          {blocks.map((block, i) => {
+            const rel = block.rel;
+            if (!rel) {
+              // no coords — append in normal flow at bottom area
+              return (
+                <div
+                  key={block.id || i}
+                  className="relative px-1 py-1"
+                  style={{ marginTop: "0.25rem" }}
+                >
+                  <BlockRenderer block={block} imagesBase={imagesBase} />
+                </div>
+              );
             }
-            style={
-              multi
-                ? { gridTemplateColumns: `repeat(${Math.min(row.length, 3)}, minmax(0, 1fr))` }
-                : undefined
-            }
-          >
-            {row.map((block, bi) => (
-              <div key={block.id || `${ri}-${bi}`} className={multi ? "min-w-0" : ""}>
-                <BlockRenderer block={block} imagesBase={imagesBase} />
+            return (
+              <div
+                key={block.id || i}
+                className="absolute overflow-hidden"
+                style={{
+                  left: `${rel.x}%`,
+                  top: `${rel.y}%`,
+                  width: `${Math.max(rel.w, 8)}%`,
+                  // min height hint; content can grow
+                  minHeight: `${rel.h}%`,
+                }}
+              >
+                <BlockRenderer block={block} imagesBase={imagesBase} compact />
               </div>
-            ))}
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // Sequential fallback with row detection
+  return (
+    <div className="book-page space-y-2">
+      {blocks.map((block, i) => (
+        <div key={block.id || i} className="my-1">
+          <BlockRenderer block={block} imagesBase={imagesBase} />
+        </div>
+      ))}
     </div>
   );
 }

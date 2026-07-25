@@ -1,9 +1,59 @@
-*.pdf
-bin/
-ncert-parser
-tmp/
-*.exe
+# ---- OS / Editor ----
 .DS_Store
+Thumbs.db
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+env/
+.env
 *.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Node / Next.js ----
+web/node_modules/
+web/.next/
+web/out/
+web/.turbo/
+web/.vercel/
+web/npm-debug.log*
+web/yarn-debug.log*
+web/yarn-error.log*
+
+# ---- Go (legacy) ----
+bin/
+ncert-parser
+*.exe
+*.test
+*.out
+
+# ---- Parsed data / large artifacts (source code tracked, data not) ----
+web/public/data/**/*.json
+web/public/data/**/*.png
+web/public/data/**/*.jpg
+web/public/data/**/*.jpeg
+web/public/data/**/*.webp
+web/public/data/images/
+*.pdf
+tmp/
+temp/
+uploads/
+output/
+
+# ---- Keep folder structure ----
+!web/public/data/.gitkeep
+!web/public/data/images/.gitkeep
