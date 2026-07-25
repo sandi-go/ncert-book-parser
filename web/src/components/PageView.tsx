@@ -22,15 +22,8 @@ function isCaptionBlock(b: Block): boolean {
 }
 
 function isCalloutTitleBlock(b: Block): boolean {
-  const t = (b.type || "").toLowerCase();
   const text = (b.text || "").toLowerCase().replace(/[^a-z\s]/g, "").trim();
-  const isHeader =
-    t.includes("sectionheader") ||
-    t.includes("title") ||
-    t === "heading" ||
-    t.includes("section_header") ||
-    t.includes("text");
-  if (!isHeader && !text) return false;
+  if (!text) return false;
   return (
     text === "think and reflect" ||
     text.startsWith("think and reflect") ||
@@ -41,18 +34,24 @@ function isCalloutTitleBlock(b: Block): boolean {
   );
 }
 
-function isCalloutStopBlock(b: Block): boolean {
+/**
+ * Only blocks that truly belong inside the peach box:
+ * - short questions (?)
+ * - numbered / roman list items
+ * NOT long narrative notes that come after the box in the book.
+ */
+function isCalloutBodyBlock(b: Block): boolean {
   const t = (b.type || "").toLowerCase();
   const text = (b.text || "").trim();
+  if (!text) return false;
 
-  if (isCalloutTitleBlock(b)) return true;
-  if (isImageBlock(b)) return true;
-  if (t.includes("table")) return true;
-
-  // new section / example / exercise ends the callout
-  if (/^example\s*\d+/i.test(text)) return true;
-  if (/exercise\s*set/i.test(text)) return true;
-  if (/^\d+\.\d+/i.test(text) && text.length < 80) return true; // 2.6 VISUALISING...
+  // never pull these into the box
+  if (isCalloutTitleBlock(b)) return false;
+  if (isImageBlock(b) || isCaptionBlock(b)) return false;
+  if (t.includes("table")) return false;
+  if (/^example\s*\d+/i.test(text)) return false;
+  if (/exercise\s*set/i.test(text)) return false;
+  if (/^\d+\.\d+\s/i.test(text) && text.length < 100) return false;
 
   if (
     t.includes("sectionheader") ||
@@ -60,8 +59,33 @@ function isCalloutStopBlock(b: Block): boolean {
     t === "heading" ||
     t.includes("section_header")
   ) {
-    // another heading that's not a callout title
-    if (!isCalloutTitleBlock(b)) return true;
+    return false;
+  }
+
+  // narrative openers that sit AFTER the box in NCERT
+  if (
+    /^(note that|thus,|therefore,|hence,|we observe|observe that|in this chapter|as we have|let us|now we)/i.test(
+      text
+    )
+  ) {
+    return false;
+  }
+
+  // long paragraph without question/list markers → body text, not callout
+  const isListLike =
+    /^\d+\s*[\.)]/.test(text) ||
+    /\(\s*(?:i|ii|iii|iv|v)\s*\)/i.test(text) ||
+    /^[-•]/.test(text);
+
+  const isQuestion = /\?\s*$/.test(text) || (text.includes("?") && text.length < 280);
+
+  if (text.length > 180 && !isListLike && !isQuestion) {
+    return false;
+  }
+
+  // accept short prompts, questions, and list items
+  if (isQuestion || isListLike || text.length < 200) {
+    return true;
   }
 
   return false;
@@ -94,8 +118,8 @@ function attachCaptions(blocks: Block[]): Block[] {
 }
 
 /**
- * Group "Think and Reflect" title + following body blocks into one virtual Callout block
- * so the UI can draw a single bordered box like the textbook.
+ * Group "Think and Reflect" + only the following body blocks that belong in the box.
+ * Stops as soon as a non-body block appears (so "Note that..." stays outside).
  */
 function groupCallouts(blocks: Block[]): Block[] {
   const out: Block[] = [];
@@ -106,9 +130,12 @@ function groupCallouts(blocks: Block[]): Block[] {
       const title = (cur.text || "Think and Reflect").trim();
       const body: Block[] = [];
       let j = i + 1;
-      while (j < blocks.length && !isCalloutStopBlock(blocks[j])) {
+      // only consume consecutive body-eligible blocks
+      while (j < blocks.length && isCalloutBodyBlock(blocks[j])) {
         body.push(blocks[j]);
         j++;
+        // safety: callout boxes in NCERT are small — max ~6 body blocks
+        if (body.length >= 6) break;
       }
       out.push({
         id: cur.id || `callout-${i}`,
@@ -154,7 +181,6 @@ function groupRows(blocks: Block[]): Block[][] {
   let i = 0;
   while (i < items.length) {
     const cur = items[i];
-    // Callouts always take full width alone
     if ((cur.b.type || "").toLowerCase() === "callout") {
       rows.push([cur.b]);
       i++;
