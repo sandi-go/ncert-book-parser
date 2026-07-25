@@ -34,18 +34,57 @@ function isCalloutTitleBlock(b: Block): boolean {
   );
 }
 
-/**
- * Only blocks that truly belong inside the peach box:
- * - short questions (?)
- * - numbered / roman list items
- * NOT long narrative notes that come after the box in the book.
- */
+/** Prompt / question style typical inside NCERT callout boxes */
+function looksLikeCalloutPrompt(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+
+  // explicit question
+  if (/\?\s*$/.test(t)) return true;
+  if ((t.match(/\?/g) || []).length >= 1 && t.length < 320) return true;
+
+  // numbered / roman list of questions
+  if (/^\d+\s*[\.)]/.test(t)) return true;
+  if (/^\(\s*(?:i|ii|iii|iv|v)\s*\)/i.test(t)) return true;
+
+  // imperative / reflective openers used in Think and Reflect
+  if (
+    /^(can you|could you|what |how |why |which |when |where |predict |identify |find |write |list |draw |complete |observe |try |do you|is there|are there|using )/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/** Explanatory textbook narrative that sits OUTSIDE the peach box */
+function looksLikeNarrative(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+
+  if (
+    /^(note that|thus[, ]|therefore[, ]|hence[, ]|we observe|observe that|in this chapter|as we have|let us|now we|each |the table|the polynomial|this leads|to generalise|for example|also,|further,|in term)/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+
+  // long paragraph without any question mark → almost always body text
+  if (t.length > 140 && !t.includes("?") && !/^\d+\s*[\.)]/.test(t)) {
+    return true;
+  }
+
+  return false;
+}
+
 function isCalloutBodyBlock(b: Block): boolean {
   const t = (b.type || "").toLowerCase();
   const text = (b.text || "").trim();
   if (!text) return false;
 
-  // never pull these into the box
   if (isCalloutTitleBlock(b)) return false;
   if (isImageBlock(b) || isCaptionBlock(b)) return false;
   if (t.includes("table")) return false;
@@ -62,33 +101,11 @@ function isCalloutBodyBlock(b: Block): boolean {
     return false;
   }
 
-  // narrative openers that sit AFTER the box in NCERT
-  if (
-    /^(note that|thus,|therefore,|hence,|we observe|observe that|in this chapter|as we have|let us|now we)/i.test(
-      text
-    )
-  ) {
-    return false;
-  }
+  // hard reject narrative
+  if (looksLikeNarrative(text)) return false;
 
-  // long paragraph without question/list markers → body text, not callout
-  const isListLike =
-    /^\d+\s*[\.)]/.test(text) ||
-    /\(\s*(?:i|ii|iii|iv|v)\s*\)/i.test(text) ||
-    /^[-•]/.test(text);
-
-  const isQuestion = /\?\s*$/.test(text) || (text.includes("?") && text.length < 280);
-
-  if (text.length > 180 && !isListLike && !isQuestion) {
-    return false;
-  }
-
-  // accept short prompts, questions, and list items
-  if (isQuestion || isListLike || text.length < 200) {
-    return true;
-  }
-
-  return false;
+  // only accept clear prompts / questions / lists
+  return looksLikeCalloutPrompt(text);
 }
 
 function attachCaptions(blocks: Block[]): Block[] {
@@ -117,10 +134,6 @@ function attachCaptions(blocks: Block[]): Block[] {
   return out;
 }
 
-/**
- * Group "Think and Reflect" + only the following body blocks that belong in the box.
- * Stops as soon as a non-body block appears (so "Note that..." stays outside).
- */
 function groupCallouts(blocks: Block[]): Block[] {
   const out: Block[] = [];
   let i = 0;
@@ -130,12 +143,10 @@ function groupCallouts(blocks: Block[]): Block[] {
       const title = (cur.text || "Think and Reflect").trim();
       const body: Block[] = [];
       let j = i + 1;
-      // only consume consecutive body-eligible blocks
       while (j < blocks.length && isCalloutBodyBlock(blocks[j])) {
         body.push(blocks[j]);
         j++;
-        // safety: callout boxes in NCERT are small — max ~6 body blocks
-        if (body.length >= 6) break;
+        if (body.length >= 5) break;
       }
       out.push({
         id: cur.id || `callout-${i}`,
