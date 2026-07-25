@@ -80,7 +80,6 @@ function formatText(raw?: string): string {
   return t.trim();
 }
 
-/** Bold common NCERT term phrases inside already-formatted text */
 function emphasizeTerms(html: string): string {
   const terms = [
     "one-variable polynomials",
@@ -97,7 +96,6 @@ function emphasizeTerms(html: string): string {
     const re = new RegExp(`\\b(${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})\\b`, "gi");
     out = out.replace(re, `<strong class="term">$1</strong>`);
   }
-  // avoid double-wrapping
   out = out.replace(/<strong class="term"><strong class="term">/g, `<strong class="term">`);
   out = out.replace(/<\/strong><\/strong>/g, "</strong>");
   return out;
@@ -122,10 +120,8 @@ function isExerciseTitle(text: string): boolean {
   return /exercise\s*set/i.test(text) || /^exercise\s*\d/i.test(text);
 }
 
-/** Split "1. ... 2. ... 3. ..." even when space after dot is missing */
 function splitNumberedItems(text: string): string[] | null {
   const plain = text.replace(/<[^>]+>/g, "");
-  // allow "1.Find" or "1. Find" or "1) Find"
   if (!/^\s*1\s*[\.)]\s*\S/.test(plain)) return null;
 
   const parts = plain.split(/(?=\s*[2-9]\d*\s*[\.)]\s*\S)|(?=\s*1\d\s*[\.)]\s*\S)/);
@@ -135,20 +131,25 @@ function splitNumberedItems(text: string): string[] | null {
   return items;
 }
 
-/** Split "(i) ... (ii) ... (iii) ..." roman lists */
 function splitRomanItems(text: string): string[] | null {
   const plain = text.replace(/<[^>]+>/g, "");
-  // must contain at least (i) and (ii)
   if (!/\(\s*i\s*\)/i.test(plain) || !/\(\s*ii\s*\)/i.test(plain)) return null;
 
-  // Split before (i) (ii) (iii) (iv) (v) (vi) (vii) (viii) (ix) (x)
   const parts = plain.split(/(?=\(\s*(?:x|ix|viii|vii|vi|v|iv|iii|ii|i)\s*\))/i);
   const items = parts.map((p) => p.trim()).filter(Boolean);
-
-  // Keep only parts that start with (roman)
-  const romanItems = items.filter((it) => /^\(\s*(?:x|ix|viii|vii|vi|v|iv|iii|ii|i)\s*\)/i.test(it));
+  const romanItems = items.filter((it) =>
+    /^\(\s*(?:x|ix|viii|vii|vi|v|iv|iii|ii|i)\s*\)/i.test(it)
+  );
   if (romanItems.length < 2) return null;
   return romanItems;
+}
+
+/** Text before the first (i) — the exercise stem */
+function leadBeforeRoman(text: string): string {
+  const plain = text.replace(/<[^>]+>/g, "");
+  const idx = plain.search(/\(\s*i\s*\)/i);
+  if (idx <= 0) return "";
+  return formatText(plain.slice(0, idx));
 }
 
 function parseRomanLabel(item: string): { label: string; body: string } {
@@ -163,54 +164,47 @@ function parseNumberLabel(item: string): { label: string; body: string } {
   return { label: "•", body: formatText(item) };
 }
 
-/**
- * Smart list renderer:
- * 1) numbered 1. 2. 3.
- * 2) roman (i) (ii) (iii)
- * 3) numbered items that themselves contain roman sublists
- */
+/** Render stem + (i)(ii)(iii) sub-list */
+function renderWithRomanSublist(body: string) {
+  const sub = splitRomanItems(body);
+  if (!sub) return <RichText text={body} className="whitespace-pre-wrap" />;
+
+  const lead = leadBeforeRoman(body);
+  return (
+    <>
+      {lead ? (
+        <p className="mb-2 whitespace-pre-wrap">
+          <RichText text={lead} />
+        </p>
+      ) : null}
+      <ol className="mt-1 space-y-1.5 list-none ml-0">
+        {sub.map((s, j) => {
+          const r = parseRomanLabel(s);
+          return (
+            <li key={j} className="flex gap-2">
+              <span className="text-[#5a5040] shrink-0 min-w-[2.25rem]">{r.label}</span>
+              <RichText text={r.body} className="whitespace-pre-wrap" />
+            </li>
+          );
+        })}
+      </ol>
+    </>
+  );
+}
+
 function renderSmartList(text: string, nested = false) {
   const numbered = splitNumberedItems(text);
   if (numbered) {
     return (
-      <ol className={nested ? "space-y-2 list-none" : "my-4 space-y-3 list-none"}>
+      <ol className={nested ? "space-y-3 list-none" : "my-4 space-y-4 list-none"}>
         {numbered.map((item, i) => {
           const { label, body } = parseNumberLabel(item);
-          // body may still have (i)(ii) sub-items
-          const sub = splitRomanItems(body);
           return (
             <li key={i} className="flex gap-3 text-[#2a2418] leading-7 text-[16px]">
               <span className="text-[#5a5040] shrink-0 font-semibold min-w-[1.5rem] text-right">
                 {label}
               </span>
-              <div className="min-w-0 flex-1">
-                {sub ? (
-                  <>
-                    {/* lead-in before first (i), if any */}
-                    {(() => {
-                      const lead = body.split(/\(\s*i\s*\)/i)[0]?.trim();
-                      return lead ? (
-                        <p className="mb-2">
-                          <RichText text={lead} />
-                        </p>
-                      ) : null;
-                    })()}
-                    <ol className="mt-1 space-y-1.5 list-none ml-1">
-                      {sub.map((s, j) => {
-                        const r = parseRomanLabel(s);
-                        return (
-                          <li key={j} className="flex gap-2">
-                            <span className="text-[#5a5040] shrink-0 min-w-[2rem]">{r.label}</span>
-                            <RichText text={r.body} className="whitespace-pre-wrap" />
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  </>
-                ) : (
-                  <RichText text={body} className="whitespace-pre-wrap" />
-                )}
-              </div>
+              <div className="min-w-0 flex-1">{renderWithRomanSublist(body)}</div>
             </li>
           );
         })}
@@ -220,15 +214,12 @@ function renderSmartList(text: string, nested = false) {
 
   const roman = splitRomanItems(text);
   if (roman) {
-    // optional lead-in sentence before (i)
-    const leadMatch = text.replace(/<[^>]+>/g, "").split(/\(\s*i\s*\)/i);
-    const lead = leadMatch[0]?.trim();
-
+    const lead = leadBeforeRoman(text);
     return (
       <div className={nested ? "" : "my-3"}>
-        {lead && lead.length > 3 && (
+        {lead && (
           <p className="mb-2 text-[#2a2418] leading-7 text-[16px]">
-            <RichText text={formatText(lead)} />
+            <RichText text={lead} />
           </p>
         )}
         <ol className="space-y-2 list-none">
@@ -246,7 +237,6 @@ function renderSmartList(text: string, nested = false) {
     );
   }
 
-  // single numbered item
   const m = text.replace(/<[^>]+>/g, "").match(/^(\d+)\s*[\.)]\s*([\s\S]*)$/);
   if (m) {
     return (
@@ -255,7 +245,7 @@ function renderSmartList(text: string, nested = false) {
           <span className="text-[#5a5040] shrink-0 font-semibold min-w-[1.5rem] text-right">
             {m[1]}.
           </span>
-          <RichText text={formatText(m[2])} className="whitespace-pre-wrap flex-1" />
+          <div className="min-w-0 flex-1">{renderWithRomanSublist(formatText(m[2]))}</div>
         </li>
       </ol>
     );
@@ -268,7 +258,6 @@ export default function BlockRenderer({ block, imagesBase = "data", nested = fal
   const type = (block.type || "").toLowerCase();
   const text = formatText(block.text);
 
-  // ---------- Callout ----------
   if (type === "callout") {
     const title = text || "Think and Reflect";
     const children = block.children || [];
@@ -290,7 +279,6 @@ export default function BlockRenderer({ block, imagesBase = "data", nested = fal
     );
   }
 
-  // ---------- Headings ----------
   if (
     type.includes("sectionheader") ||
     type.includes("title") ||
@@ -322,7 +310,6 @@ export default function BlockRenderer({ block, imagesBase = "data", nested = fal
     );
   }
 
-  // ---------- Images ----------
   if (
     type.includes("picture") ||
     type.includes("figure") ||
@@ -357,7 +344,6 @@ export default function BlockRenderer({ block, imagesBase = "data", nested = fal
     );
   }
 
-  // ---------- Tables ----------
   if (type.includes("table")) {
     if (block.html) {
       return (
@@ -376,11 +362,10 @@ export default function BlockRenderer({ block, imagesBase = "data", nested = fal
     }
   }
 
-  // ---------- Native list types ----------
   if (type.includes("listgroup") || type === "list") {
     if (block.children?.length) {
       return (
-        <ol className={nested ? "space-y-2 list-none" : "my-4 space-y-3 list-none"}>
+        <ol className={nested ? "space-y-3 list-none" : "my-4 space-y-4 list-none"}>
           {block.children.map((child, i) => (
             <BlockRenderer key={child.id || i} block={child} imagesBase={imagesBase} nested={nested} />
           ))}
@@ -393,11 +378,11 @@ export default function BlockRenderer({ block, imagesBase = "data", nested = fal
     }
   }
 
+  // ---------- ListItem: keep stem BEFORE (i)(ii)(iii) ----------
   if (type.includes("listitem") || type === "list_item") {
     const m = text.match(/^(\d+)\s*[\.)]\s*([\s\S]*)$/);
     const num = m?.[1];
     const body = m ? m[2] : text;
-    const sub = body ? splitRomanItems(body) : null;
 
     return (
       <li className={`flex gap-3 text-[#2a2418] leading-7 text-[16px] ${nested ? "my-1" : "my-2"}`}>
@@ -405,21 +390,7 @@ export default function BlockRenderer({ block, imagesBase = "data", nested = fal
           {num ? `${num}.` : "•"}
         </span>
         <div className="min-w-0 flex-1">
-          {sub ? (
-            <ol className="space-y-1.5 list-none">
-              {sub.map((s, j) => {
-                const r = parseRomanLabel(s);
-                return (
-                  <li key={j} className="flex gap-2">
-                    <span className="min-w-[2.25rem] shrink-0">{r.label}</span>
-                    <RichText text={r.body} className="whitespace-pre-wrap" />
-                  </li>
-                );
-              })}
-            </ol>
-          ) : (
-            body && <RichText text={body} className="whitespace-pre-wrap" />
-          )}
+          {body ? renderWithRomanSublist(body) : null}
           {block.children?.map((child, i) => (
             <BlockRenderer key={child.id || i} block={child} imagesBase={imagesBase} nested />
           ))}
@@ -428,7 +399,6 @@ export default function BlockRenderer({ block, imagesBase = "data", nested = fal
     );
   }
 
-  // ---------- Equations ----------
   if (type.includes("equation") || type.includes("math") || type.includes("formula")) {
     return (
       <div className="my-4 px-4 py-3 bg-[#f7f3ea] border-l-4 border-[#6b8cae] rounded-r text-center text-[#1a1520] text-lg leading-relaxed overflow-x-auto">
@@ -449,7 +419,6 @@ export default function BlockRenderer({ block, imagesBase = "data", nested = fal
     return null;
   }
 
-  // ---------- Text ----------
   if (text) {
     const smart = renderSmartList(text, nested);
     if (smart) return smart;
