@@ -17,29 +17,58 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Textbook table styling */
+.book-page {
+  display: block;
+  line-height: 1.75;
+}
+
+.block-row.single {
+  display: block;
+  margin: 0;
+}
+
+.block-row.single + .block-row.single {
+  /* natural paragraph rhythm handled by BlockRenderer margins */
+}
+
+/* Textbook table styling — critical for no-overlap */
+.book-table {
+  display: block;
+  width: 100%;
+  margin: 1.25rem 0;
+}
+
 .book-table table {
   width: 100%;
   border-collapse: collapse;
   font-family: Georgia, serif;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
+  background: #fff;
 }
 
 .book-table th,
 .book-table td {
-  border: 1px solid #d4cbb8;
-  padding: 0.5rem 0.75rem;
-  text-align: left;
-  vertical-align: top;
+  border: 1px solid #c9bfa8;
+  padding: 0.45rem 0.65rem;
+  text-align: center;
+  vertical-align: middle;
+  background: #fff;
 }
 
 .book-table th {
-  background: #f0ebe0;
+  background: #f3ebe0;
   font-weight: 600;
 }
 
 .book-table tr:nth-child(even) td {
   background: #faf7f0;
+}
+
+.book-table td:first-child,
+.book-table th:first-child {
+  text-align: left;
+  font-weight: 600;
+  background: #f3ebe0;
 }
 
 /* Marker HTML blobs */
@@ -49,18 +78,25 @@ body {
 }
 
 .book-html img {
+  max-w-full: 100%;
   max-width: 100%;
   height: auto;
   margin: 1rem auto;
   display: block;
 }
 
-.book-page {
-  /* avoid accidental flex collapse */
-  display: block;
+.book-html table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
 }
 
-/* number inputs without spinners looking weird */
+.book-html th,
+.book-html td {
+  border: 1px solid #c9bfa8;
+  padding: 0.4rem 0.6rem;
+}
+
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   opacity: 0.5;
